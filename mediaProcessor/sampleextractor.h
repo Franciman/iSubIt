@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "peaks.h"
+#include "ffmpegerror.h"
 
 template<class SampleFormat, bool Planar>
 class PeaksExtractor

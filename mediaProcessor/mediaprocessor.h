@@ -34,6 +34,7 @@ public:
         {
             ExceptionPtr = std::current_exception();
         }
+        emit finished();
     }
 
     const std::exception_ptr &getException() const
@@ -46,6 +47,12 @@ public:
 Q_SIGNALS:
     void progress(int percent);
     void finished();
+
+private Q_SLOTS:
+    void trackProgress(int percent)
+    {
+        emit progress(percent);
+    }
 
 private:
     std::exception_ptr ExceptionPtr;

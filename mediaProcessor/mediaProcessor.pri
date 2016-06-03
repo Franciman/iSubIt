@@ -6,7 +6,8 @@ HEADERS += \
     $$PWD/audio_frame_traits.h \
     $$PWD/sample_format_traits.h \
     $$PWD/sampleextractor.h \
-    $$PWD/scenechangeextractor.h
+    $$PWD/scenechangeextractor.h \
+    $$PWD/framesprocessor.h
 
 SOURCES += \
     $$PWD/mediaprocessor.cpp \

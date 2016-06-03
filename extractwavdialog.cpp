@@ -7,6 +7,7 @@
 
 #include <QMessageBox>
 
+
 extern "C"
 {
 #include <libavformat/avformat.h>
@@ -32,8 +33,15 @@ ExtractWavDialog::ExtractWavDialog(const QString &videoFile, QWidget *parent) :
             if((*Streams)->codec->codec_type == AVMEDIA_TYPE_AUDIO)
             {
                 ++i;
-                QString text = QString("%1: %2").arg(i).arg((*Streams)->codec->codec_name);
+                const AVCodecDescriptor *descr = av_codec_get_codec_descriptor((*Streams)->codec);
+                if(!descr)
+                {
+                    descr = avcodec_descriptor_get((*Streams)->codec->codec_id);
+                }
+                const char *Description = descr ? descr->long_name : "Unknown audio stream";
+                QString text = QString("%1: %2").arg(i).arg(Description);
                 ui->audioStreams->addItem(text);
+                AudioStreams.push_back(*Streams);
             }
         }
         if(i != 0)
@@ -73,9 +81,25 @@ void ExtractWavDialog::enableOkButton()
 {
     if(Extractor->getException())
     {
-        QMessageBox::critical(this, "Error", QString(Extractor->getException()))
+        try
+        {
+            std::rethrow_exception(Extractor->getException());
+        }
+        catch(std::exception &Error)
+        {
+            QMessageBox::critical(this, "Error", QString(Error.what()));
+        }
     }
-    ui->okButton->setEnabled(true);
+    else
+    {
+        ui->okButton->setEnabled(true);
+    }
+    ui->progressBar->setValue(100);
+}
+
+void ExtractWavDialog::trackProgress(int progress)
+{
+    ui->progressBar->setValue(progress);
 }
 
 void ExtractWavDialog::disableExtractButton()
@@ -88,11 +112,12 @@ void ExtractWavDialog::startExtraction()
     volatile int streamIndex = ui->audioStreams->currentIndex();
     if(streamIndex != -1)
     {
-        AVStream **AudioStream = File->streams_begin() + streamIndex;
+        AVStream *AudioStream = AudioStreams[streamIndex];
         AVStream **VideoStream = File->best_stream_of_type(AVMEDIA_TYPE_VIDEO);
         if(VideoStream == File->streams_end()) VideoStream = nullptr;
-        Extractor = new MediaExtractor(*File, *AudioStream, nullptr, peaks);
+        Extractor = new MediaExtractor(*File, AudioStream, nullptr, peaks);
         connect(Extractor, SIGNAL(finished()), this, SLOT(enableOkButton()));
+        connect(Extractor, SIGNAL(progress(int)), this, SLOT(trackProgress(int)));
         connect(ui->cancelButton, SIGNAL(clicked()), Extractor, SLOT(quit()));
         Extractor->start();
     }

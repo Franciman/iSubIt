@@ -4,12 +4,16 @@
 #include <QDialog>
 #include "mediaProcessor/peaks.h"
 
+#include <thread>
+
 namespace Ui {
 class ExtractWavDialog;
 }
 
 class MediaExtractor;
 class MediaFile;
+
+struct AVStream;
 
 class ExtractWavDialog : public QDialog
 {
@@ -25,9 +29,11 @@ private Q_SLOTS:
     void enableOkButton();
     void disableExtractButton();
     void startExtraction();
+    void trackProgress(int progress);
 
 private:
     Ui::ExtractWavDialog *ui;
+    std::vector<AVStream *> AudioStreams;
     MediaFile *File;
     MediaExtractor *Extractor;
     Peaks peaks;
