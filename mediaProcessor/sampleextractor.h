@@ -10,9 +10,12 @@
 #include "peaks.h"
 #include "ffmpegerror.h"
 
+#include <functional>
+
 template<class SampleFormat, bool Planar>
 class PeaksExtractor
 {
+    std::function<void(int)> Callback;
     AVCodecContext *CodecCtx;
     int SamplesPerPeak;
     int SamplesConsidered;
@@ -20,8 +23,10 @@ class PeaksExtractor
     AVFrame *Frame;
     Peaks &Result;
     Peak CurrPeak;
+
 public:
-    PeaksExtractor(AVCodecContext *codecCtx, Peaks &result) :
+    PeaksExtractor(std::function<void(int)> callback, AVCodecContext *codecCtx, Peaks &result) :
+        Callback(callback),
         CodecCtx(codecCtx),
         SamplesConsidered(0),
         GotFirstSample(false),
@@ -96,6 +101,8 @@ public:
 private:
     void processFrame()
     {
+        int timeStamp = av_frame_get_best_effort_timestamp(Frame);
+        Callback(timeStamp);
         audio_frame_traits<SampleFormat, Planar>::for_each_sample(Frame, [this](SampleFormat sample) {
             this->processSample(sample);
         });

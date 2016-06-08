@@ -11,11 +11,13 @@
 extern "C"
 {
 #include <libavformat/avformat.h>
+#include <libavutil/dict.h>
 }
 
 ExtractWavDialog::ExtractWavDialog(const QString &videoFile, QWidget *parent) :
     QDialog(parent),
-    ui(new Ui::ExtractWavDialog)
+    ui(new Ui::ExtractWavDialog),
+    Extractor(nullptr)
 {
     ui->setupUi(this);
 
@@ -52,6 +54,10 @@ ExtractWavDialog::ExtractWavDialog(const QString &videoFile, QWidget *parent) :
             {
                 ui->audioStreams->setEnabled(false);
             }
+            AVDictionary *metadata = (*File->streams_begin())->metadata;
+            AVDictionaryEntry *tag = nullptr;
+            while((tag = av_dict_get(metadata, "", tag, AV_DICT_IGNORE_SUFFIX)))
+                ui->outputPlainTextEdit->appendPlainText(QString("%1: %2").arg(tag->key).arg(tag->value));
         }
         else
         {

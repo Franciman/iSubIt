@@ -21,7 +21,11 @@ MainWindow::MainWindow(QWidget *parent) :
 {
     ui->setupUi(this);
     connect(ui->playButton, SIGNAL(clicked()), ui->videoPlayer, SLOT(play()));
+    connect(ui->playButton, SIGNAL(clicked()), ui->waveform, SLOT(startPlaying()));
     connect(ui->pauseButton, SIGNAL(clicked()), ui->videoPlayer, SLOT(pause()));
+    connect(ui->pauseButton, SIGNAL(clicked()), ui->waveform, SLOT(startPlaying()));
+
+    connect(ui->videoPlayer, SIGNAL(positionChanged(int)), ui->waveform, SLOT(changePlayCursorPos(int)));
 
     connect(ui->actionNew_Project, SIGNAL(triggered()), this, SLOT(newProject()));
 

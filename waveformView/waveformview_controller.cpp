@@ -2,20 +2,26 @@
 #include <QScrollBar>
 #include <QMouseEvent>
 #include <QWheelEvent>
+#include <QMenu>
 
 #include <iostream>
 #include <algorithm>
 
-void WaveformView::mouseDoubleClickEvent(QMouseEvent *ev)
+
+#include "constrain.h"
+
+#include "subtitlemodel.h"
+
+void WaveformView::mouseDoubleClick(QMouseEvent *ev)
 {
-    Q_UNUSED(ev)
-    /*int y_coord = ev->pos().y();
+    int y_coord = ev->pos().y();
     int x_coord = ev->pos().x();
 
     int x_ms = pixelToTime(x_coord) + PositionMs;
 
     // Ignore double clicks on the ruler
     if(y_coord >= height() - DisplayRulerHeight) return;
+    if(DisplayRangeLists.size() == 0) return;
 
     RangeList &SelectedSubs = getRangeListFromPos(y_coord);
 
@@ -23,28 +29,34 @@ void WaveformView::mouseDoubleClickEvent(QMouseEvent *ev)
     if(!SelectedSubs.Editable) return;
 
     // TODO: Add Dynamic edit mode
+    if(DynamicSelRange)
+    {
+        switch(DEMode)
+        {
+        case DynamicEditMode::Start:
+            emit rangeStartDoubleClick(DynamicSelRange);
+            return;
+        case DynamicEditMode::End:
+            emit rangeStopDoubleClick(DynamicSelRange);
+            return;
+        }
+    }
 
-    auto it = std::lower_bound(SelectedSubs.Subs.begin(), SelectedSubs.Subs.end(), x_ms, [](SrtSubtitle &it, int x) {
-        return it.Time.EndTime < x;
-    });
+    int idx = SelectedSubs.getRangeIdxAt(CursorMs);
+    if(idx == -1) return;
 
-    while(it != SelectedSubs.Subs.end() && it->Time.StartTime >= x_ms) ++it;
+    setSelectedRange(&SelectedSubs.Subtitles[idx].Time, false);
+    updateView(Selection);
 
-    // There is no range at x_coord position
-    if(it == SelectedSubs.Subs.end()) return;
-
-    setSelectedRange(it->Time);
-    updateView(::Selection);
+    emit selectedRange(SelectedRange, false);
 
     // TODO: Add Karaoke
-    */
 
 }
 
-void WaveformView::wheelEvent(QWheelEvent *ev)
+void WaveformView::wheel(QWheelEvent *ev)
 {
-    Q_UNUSED(ev)
-    /*QPoint angleDelta = ev->angleDelta();
+    QPoint angleDelta = ev->angleDelta();
 
     if(angleDelta.isNull()) return;
 
@@ -88,13 +100,11 @@ void WaveformView::wheelEvent(QWheelEvent *ev)
             setPositionMs(PositionMs + ScrollAmount);
         }
     }
-    updateView(PageSize);*/
+    updateView(PageSize);
 }
 
-void WaveformView::mousePressEvent(QMouseEvent *ev)
+void WaveformView::mousePress(QMouseEvent *ev)
 {
-    Q_UNUSED(ev)
-    /*
     // Let double clicks be handled only by mouseDoubleClickEvent
     // And do nothing in cases when the waveform is not loaded
     if(ev->flags() & Qt::MouseEventCreatedDoubleClick || LengthMs == 0) return;
@@ -112,39 +122,382 @@ void WaveformView::mousePressEvent(QMouseEvent *ev)
 
     // TODO: Add Middle button stuff
 
-    updateView(UpdateFlags);*/
+    updateView(UpdateFlags);
 }
 
-void WaveformView::mouseMoveEvent(QMouseEvent *ev)
+void WaveformView::mouseMove(QMouseEvent *ev)
 {
-    Q_UNUSED(ev)
+    QPoint mousePos = ev->pos();
+    // Manual clipping implementation
+    if(Clipping)
+    {
+        if(mousePos.x() < ClippingRect.left())
+        {
+            mousePos.setX(ClippingRect.left());
+            QCursor::setPos(mapToGlobal(mousePos));
+        }
+        else if(mousePos.x() > ClippingRect.right())
+        {
+            mousePos.setX(ClippingRect.right());
+            QCursor::setPos(mapToGlobal(mousePos));
+        }
+    }
+
+    // Let double clicks be handled only by mouseDoubleClickEvent
+    // And do nothing in cases when the waveform is not loaded
+    if(ev->flags() & Qt::MouseEventCreatedDoubleClick || LengthMs == 0) return;
+
+    int UpdateFlags = 0;
+    int NewCursorPos;
+    RangeList &RL = getRangeListFromPos(mousePos.y());
+    int Width = timeToPixel(PageSizeMs);
+    int X = mousePos.x();
+
+    if(MouseIsDown)
+    {
+        if(ev->buttons() == Qt::LeftButton)
+        {
+            Constrain(X, 0, Width);
+            NewCursorPos = pixelToTime(X) + PositionMs;
+
+            // Make sure to clip selection
+            if(MinSelTime != -1)
+            {
+                Constrain(NewCursorPos, MinSelTime, std::numeric_limits<int>::max());
+            }
+            if(MaxSelTime != -1)
+            {
+                Constrain(NewCursorPos, 0, MaxSelTime);
+            }
+
+            // Snapping
+            if(!(ev->modifiers() & Qt::ControlModifier) && SnappingEnabled)
+            {
+                int SnappingPos = findCorrectedSnappingPos(NewCursorPos, RL);
+                if(SnappingPos != -1)
+                {
+                    NewCursorPos = SnappingPos;
+                }
+            }
+
+            if(SelectionOrigin != -1 && SelectionOrigin != NewCursorPos)
+            {
+                //Update selection
+                if(NewCursorPos > SelectionOrigin)
+                {
+                    TheSelection.StartTime = SelectionOrigin;
+                    TheSelection.EndTime = NewCursorPos;
+                }
+                else
+                {
+                    TheSelection.StartTime = NewCursorPos;
+                    TheSelection.EndTime = SelectionOrigin;
+                }
+                UpdateFlags |= Selection;
+                if(SelectedRange)
+                {
+                    NeedSortSelectedSub = true;
+                    if(*SelectedRange != TheSelection)
+                    {
+                        SelectedRange->StartTime = TheSelection.StartTime;
+                        SelectedRange->EndTime = TheSelection.EndTime;
+                        UpdateFlags |= TheRange;
+                        emit selectedRangeChange();
+                    }
+                }
+                emit selectionChanged();
+            }
+
+            if(CursorMs != NewCursorPos && DEMode == DynamicEditMode::None)
+            {
+                CursorMs = NewCursorPos;
+                UpdateFlags |= Cursor;
+                emit cursorChange();
+            }
+        }
+
+        // TODO: Add Middle button
+    }
+    else if(RL.Editable)
+    {
+        Constrain(X, 0, Width);
+        int CursorPosMs = pixelToTime(X) + PositionMs;
+
+        // Dynamic selection
+        if(ev->modifiers() == 0)
+        {
+            // Find a subtitle under the mouse
+            int RangeSelWindow = pixelToTime(4);
+            if(RangeSelWindow < 1) RangeSelWindow = 1;
+
+            // First pass: check only inside sub
+            Range *RangeUnder = RL.findFirstRangeAt(CursorPosMs, 0);
+            while(RangeUnder)
+            {
+                if(checkSubtitleForDynamicSelection(RangeUnder, CursorPosMs, RangeSelWindow, mousePos, RL)) return;
+                RangeUnder = RL.findNextRange();
+            }
+
+            // Second pass: Wider search
+            RangeSelWindow = pixelToTime(2);
+            if(RangeSelWindow < 1) RangeSelWindow = 1;
+            RangeUnder = RL.findFirstRangeAt(CursorPosMs, RangeSelWindow);
+            while(RangeUnder)
+            {
+                if(checkSubtitleForDynamicSelection(RangeUnder, CursorPosMs, RangeSelWindow, mousePos, RL)) return;
+                RangeUnder = RL.findNextRange();
+            }
+
+            // Check selection
+            if(!selectionIsEmpty())
+            {
+                RangeSelWindow = pixelToTime(4);
+                if(RangeSelWindow < 1) RangeSelWindow = 1;
+                if(checkSubtitleForDynamicSelection(&TheSelection, CursorPosMs, RangeSelWindow, mousePos, RL))
+                {
+                    return;
+                }
+            }
+        }
+
+        if(setMinBlankAt(CursorPosMs, RL)) UpdateFlags |= TheRange;
+        setCursor(QCursor(Qt::ArrowCursor));
+        DEMode = DynamicEditMode::None;
+        DynamicSelRangeOld = DynamicSelRange;
+        DynamicSelRange = nullptr;
+        if(DynamicSelRange != DynamicSelRangeOld) UpdateFlags |= TheRange;
+    }
+    else
+    {
+        // TO clear min blank info
+        if(setMinBlankAt(-1, RL))
+        {
+            UpdateFlags |= TheRange;
+        }
+        DEMode = DynamicEditMode::None;
+        DynamicSelRangeOld = DynamicSelRange;
+        DynamicSelRange = nullptr;
+        if(DynamicSelRangeOld != DynamicSelRange)
+        {
+            UpdateFlags |= TheRange;
+        }
+    }
+    updateView(UpdateFlags);
 }
 
-void WaveformView::mouseReleaseEvent(QMouseEvent *ev)
+void WaveformView::mouseRelease(QMouseEvent *ev)
 {
-    Q_UNUSED(ev)
-    /*int y_coord = ev->pos().y();
+    int y_coord = ev->pos().y();
 
     // Ignore events on the ruler
     if(y_coord >= height() - DisplayRulerHeight) return;
 
+    if(DisplayRangeLists.size() == 0) return;
+
     RangeList &RL = getRangeListFromPos(y_coord);
 
-    MouseIsDown = false;*/
+    if(TheSelection.duration() < 40 && (!SelectedRange || !DynamicSelRange))
+    {
+        clearSelection();
+    }
+
+    if(NeedSortSelectedSub)
+    {
+        emit selectedRangeChanged(true);
+        RL.fullSort();
+        NeedSortSelectedSub = false;
+    }
+
+    SelectionOrigin = -1;
+    ScrollOrigin = -1;
+    OldSelectionStart = OldSelectionEnd = -1;
+
+
+    MouseIsDown = false;
+    DEMode = DynamicEditMode::None;
+    DynamicSelRange = nullptr;
+    MinSelTime = MaxSelTime = -1;
+    Clipping = false;
 }
 
 void WaveformView::mousePressCoolEdit(QMouseEvent *ev, int &UpdateFlags, RangeList &RL)
 {
-    Q_UNUSED(ev)
-    Q_UNUSED(UpdateFlags)
-    Q_UNUSED(RL)
-    /*
     if(ev->button() == Qt::LeftButton)
     {
+        // TODO: Add Karaoke
 
+        QPoint MousePos = ev->pos();
+        // Readjust mouse cursor position
+        if(DEMode == DynamicEditMode::Start || DEMode == DynamicEditMode::End)
+        {
+            MousePos.setX(timeToPixel(DynamicEditTime - PositionMs));
+            QCursor::setPos(mapToGlobal(MousePos));
+        }
+
+        int NewCursorPos = pixelToTime(MousePos.x()) + PositionMs;
+
+        // Snapping
+        if(SnappingEnabled && !(ev->modifiers() & Qt::ControlModifier))
+        {
+            int SnappingPos = findCorrectedSnappingPos(NewCursorPos, RL);
+            if(SnappingPos != -1)
+            {
+                NewCursorPos = SnappingPos;
+            }
+        }
+
+        if(ev->modifiers() & Qt::ShiftModifier || DEMode != DynamicEditMode::None)
+        {
+            // DynamicSelectionRange
+            if(DynamicSelRange && DynamicSelRange != SelectedRange)
+            {
+               setSelectedRange(DynamicSelRange, false);
+               UpdateFlags |= Selection;
+               emit selectedRange(SelectedRange, true);
+            }
+
+            if(NewCursorPos > TheSelection.StartTime + TheSelection.duration() / 2)
+            {
+                // We are close to the end of the selection
+                if(selectionIsEmpty())
+                {
+                    if(NewCursorPos > CursorMs)
+                    {
+                        TheSelection.EndTime = NewCursorPos;
+                        TheSelection.StartTime = CursorMs;
+                    }
+                    else
+                    {
+                        TheSelection.EndTime = CursorMs;
+                        TheSelection.StartTime = NewCursorPos;
+                    }
+                }
+                else
+                {
+                    TheSelection.EndTime = NewCursorPos;
+                }
+
+                SelectionOrigin = TheSelection.StartTime;
+            }
+            else
+            {
+                // We are close to the start of the selection
+                TheSelection.StartTime = NewCursorPos;
+                SelectionOrigin = TheSelection.EndTime;
+
+            }
+
+            if(SelectedRange)
+            {
+                NeedSortSelectedSub = true;
+                OldSelectionStart = SelectedRange->StartTime;
+                OldSelectionEnd = SelectedRange->EndTime;
+                SelectedRange->StartTime = TheSelection.StartTime;
+                SelectedRange->EndTime = TheSelection.EndTime;
+                UpdateFlags |= TheRange;
+                if(DEMode == DynamicEditMode::None)
+                {
+                    emit selectedRangeChange();
+                }
+            }
+            emit selectionChanged();
+            UpdateFlags |= Selection;
+        }
+        else
+        {
+            if(TheSelection.StartTime != TheSelection.EndTime)
+            {
+                UpdateFlags |= Selection;
+            }
+            SelectionOrigin = NewCursorPos;
+            setSelectedRange(nullptr, false);
+        }
+
+        // TODO: Add mouse anti overlapping case
+        if(EnableMouseAntiOverlapping)
+        {
+            int x1 = 0;
+            int Width =timeToPixel(PageSizeMs);
+            int x2 = Width;
+
+            MaxSelTime = MinSelTime = -1;
+            int i = RL.findInsertPos(NewCursorPos, -1);
+            if(i >= 0)
+            {
+                if(SelectedRange)
+                {
+                    if(NewCursorPos == SelectedRange->StartTime)
+                    {
+                        if(i > 0)
+                        {
+                            MinSelTime = RL.Subtitles[i-1].Time.EndTime + 1;
+                            x1 = timeToPixel(MaxSelTime - PositionMs);
+                        }
+                        MaxSelTime = SelectedRange->EndTime - 1;
+                        x2 = timeToPixel(MaxSelTime - PositionMs);
+                    }
+                    else
+                    {
+                        MinSelTime = SelectedRange->StartTime + 1;
+                        x1 = timeToPixel(MinSelTime - PositionMs);
+                        if(i < RL.Subtitles.size())
+                        {
+                            MaxSelTime = RL.Subtitles[i+1].Time.StartTime -1;
+                            x2 = timeToPixel(MaxSelTime - PositionMs);
+                        }
+                    }
+                }
+                else
+                {
+                    if(i > 0 && NewCursorPos >= RL.Subtitles[i-1].Time.StartTime && NewCursorPos <= RL.Subtitles[i-1].Time.EndTime)
+                    {
+                        // Selection only INSIDE subtitle range
+                    }
+                    else
+                    {
+                        // Selection only OUTSIDE subtitle range
+                        if(i > 0)
+                        {
+                            MinSelTime = RL.Subtitles[i - 1].Time.EndTime + 1;
+                            x1 = timeToPixel(MinSelTime - PositionMs);
+                        }
+                        if(i < RL.Subtitles.size())
+                        {
+                            MaxSelTime = RL.Subtitles[i].Time.StartTime - 1;
+                            x2 = timeToPixel(MaxSelTime - PositionMs);
+                        }
+                    }
+                }
+            }
+            Constrain(x1, 0, Width);
+            Constrain(x2, 0, Width);
+            Clipping = true;
+            ClippingRect.setLeft(x1 - 2);
+            ClippingRect.setRight(x2 + 3);
+            ClippingRect.setTop(0);
+            ClippingRect.setBottom(Viewport->height());
+        }
+
+        if(NewCursorPos != CursorMs && DEMode == DynamicEditMode::None)
+        {
+            CursorMs = NewCursorPos;
+            emit cursorChange();
+            UpdateFlags |= Cursor;
+        }
     }
-    */
 }
+
+void WaveformView::showContextMenu(QContextMenuEvent *ev)
+{
+    QMenu *Menu = new QMenu(this);
+    Menu->addAction("Yo");
+    QAction *Res = Menu->exec(ev->pos());
+    if(Res)
+    {
+        std::cout << "Yay" << std::endl;
+    }
+}
+
 
 void WaveformView::zoomRange(Range &range)
 {

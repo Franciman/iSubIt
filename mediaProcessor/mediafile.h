@@ -45,6 +45,11 @@ public:
     // If none is found return streams_end();
     AVStream **best_stream_of_type(AVMediaType type);
 
+    AVDictionary *metadata() const
+    {
+        return FormatCtx->metadata;
+    }
+
     double duration_in_seconds() const;
 
     // This function throws an FFmpegError if an error occurs

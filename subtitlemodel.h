@@ -10,12 +10,40 @@
 
 struct RangeList
 {
+private:
+    int SearchStartAt;
+    int SearchExpandBy;
+    int SearchIdx;
+public:
     bool Editable;
     std::vector<SrtSubtitle> Subtitles;
     RangeList(bool editable, std::vector<SrtSubtitle> &&Subs) :
         Editable(editable),
         Subtitles(std::move(Subs))
     { }
+
+    int findInsertPos(const Range &R) const;
+    int findInsertPos(int Start, int End) const
+    {
+        Range R;
+        R.StartTime = Start;
+        if(End == -1)
+        {
+            R.EndTime = Start + 1;
+        }
+        else
+        {
+            R.EndTime = End;
+        }
+        return findInsertPos(R);
+    }
+
+    void fullSort();
+
+    int getRangeIdxAt(int pos) const;
+
+    Range *findFirstRangeAt(int PosMs, int ExpandBy);
+    Range *findNextRange();
 };
 
 class SubtitleModel : public QAbstractTableModel

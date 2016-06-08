@@ -13,12 +13,20 @@ extern "C"
 #include "sampleextractor.h"
 #include "scenechangeextractor.h"
 
+#include <functional>
+
 #include <QObject>
 
 
 struct FramesProcessor : public QObject
 {
     Q_OBJECT
+private:
+    void trackProgress(int total, int val)
+    {
+        emit progress((val * 100) / total);
+    }
+
 public:
     template<class SampleFormat, bool Planar>
     void processFrames(MediaFile &media, AVCodecContext *AudioCodecCtx, AVCodecContext *VideoCodecCtx, AVStream *audioStream, AVStream *videoStream, Peaks &PeakList);
@@ -43,10 +51,10 @@ void FramesProcessor::processFrames(MediaFile &media, AVCodecContext *AudioCodec
    int audio_stream_index = audioStream->index;
    int video_stream_index = videoStream->index;
 
-   PeaksExtractor<SampleFormat, Planar> PExtractor(AudioCodecCtx, PeakList);
-   //SceneChangeExtractor SCExtractor(videoStream, VideoCodecCtx, SceneChanges);
+   using namespace std::placeholders;
 
-   double time_base = static_cast<double>(AudioCodecCtx->time_base.num) / AudioCodecCtx->time_base.den;
+   PeaksExtractor<SampleFormat, Planar> PExtractor(std::bind(&FramesProcessor::trackProgress, this, media.duration_in_seconds(), _1), AudioCodecCtx, PeakList);
+   //SceneChangeExtractor SCExtractor(videoStream, VideoCodecCtx, SceneChanges);
 
    while(media.getNextPacket(pkt))
    {
@@ -59,7 +67,6 @@ void FramesProcessor::processFrames(MediaFile &media, AVCodecContext *AudioCodec
       {
           //SCExtractor(pkt);
       }
-      emit progress(((orig_pkt.pts * time_base) * 100) / media.duration_in_seconds());
       av_packet_unref(&orig_pkt);
    }
 

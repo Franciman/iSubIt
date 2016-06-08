@@ -4,6 +4,8 @@
 
 #include "timemstoshortstring.h"
 
+#include "constrain.h"
+
 #include "subtitlemodel.h"
 
 const QColor WavColor = QColor(0x00a7f24a);
@@ -18,13 +20,12 @@ const QColor RulerTextColor = QColor(0x00e0e0e0);
 const QColor RulerTextShadowColor = QColor(Qt::black);
 const QColor CursorColor = QColor(Qt::yellow);
 
-
 void WaveformView::updateView(int flags)
 {
     if(flags & PageSize)
     {
-        OffscreenWav = QImage(Viewport->size(), QImage::Format_ARGB32);
-        Offscreen = QImage(Viewport->size(), QImage::Format_ARGB32);
+        OffscreenWav = QPixmap(Viewport->size());
+        Offscreen = QPixmap(Viewport->size());
         QPainter painter(&OffscreenWav);
         paintWav(painter, false);
         paintRuler(painter);
@@ -38,24 +39,26 @@ void WaveformView::updateView(int flags)
        paintRuler(painter);
     }
     QPainter painter(&Offscreen);
-    painter.drawImage(0, 0, OffscreenWav);
+    painter.drawPixmap(0, 0, OffscreenWav);
     int Height = Viewport->height() - DisplayRulerHeight;
     if(DisplayRangeLists.size() != 0)
     {
         int SubHeight = Height / DisplayRangeLists.size();
 
         // paintSceneChange
-        // paintMinimumBlank
 
         unsigned int i = 0;
         for(auto subsList = DisplayRangeLists.cbegin(); subsList != DisplayRangeLists.cend(); ++subsList, ++i)
         {
             paintRanges(painter, **subsList, SubHeight * i, SubHeight * (i+1), i == 0 /* draw topLine? */, i == DisplayRangeLists.size() - 1 /* draw bottomLine ? */);
         }
+
+        paintMinimumBlank(painter, 0, Height);
     }
 
     paintSelection(painter);
     paintCursor(painter);
+    paintPlayCursor(painter);
 
     Viewport->setOffscreen(&Offscreen);
     Viewport->update();
@@ -63,95 +66,94 @@ void WaveformView::updateView(int flags)
 
 void WaveformView::paintWav(QPainter &painter, bool TryOptimize)
 {
-    //return;
     if(LengthMs == 0 || PeakList.empty())
     {
-        painter.fillRect(Viewport->rect(), WavBackColor);
-        return;
+        painter.fillRect(painter.window(), WavBackColor);
     }
-
-    volatile int Width = Viewport->width();//timeToPixel(PageSizeMs);
-    QRect Rect = Viewport->rect();
-    //double PeaksPerPixelScaled = double(TimePerPixel * SampleRateMs) / PeakList.samplesPerPeak();
-    //double StartPositionInPeaks = double(PositionMs * SampleRateMs) / PeakList.samplesPerPeak();
-    volatile double PeaksPerPixelScaled = (((PageSizeMs / 1000.0) * PeakList.sampleRate()) / PeakList.samplesPerPeak()) / Width;
-    volatile double StartPositionInPeaks =((PositionMs / 1000.0) * PeakList.sampleRate()) / PeakList.samplesPerPeak();
-
-    int x1_update = 0;
-    int x2_update = Width;
-
-    if(TryOptimize && OldPageSizeMs == PageSizeMs)
+    else
     {
-        int x_optim;
-        if(PositionMs > OldPositionMs)
+        painter.setPen(WavColor);
+
+        QRect Rect = Viewport->rect();
+
+        int Width = timeToPixel(PageSizeMs);
+
+        double PeaksPerPixelScaled = (((PageSizeMs / 1000.0) * PeakList.sampleRate()) / PeakList.samplesPerPeak()) / Width;
+        double StartPositionInPeaks = ((PositionMs / 1000.0) * PeakList.sampleRate()) / PeakList.samplesPerPeak();
+
+        int x1_update = 0;
+        int x2_update = Width;
+
+        TryOptimize = false;
+        if(TryOptimize && PageSizeMs == OldPageSizeMs)
         {
-           x_optim = timeToPixel(PositionMs - OldPositionMs);
-           x2_update = Width;
-           x1_update = x2_update - x_optim;
-           if(x1_update != 0)
-           {
-              painter.drawImage(0, 0, OffscreenWav, x_optim, 0, x1_update, OffscreenWav.height() - DisplayRulerHeight);
-           }
-        }
-        else
-        {
-            x_optim = timeToPixel(OldPositionMs - PositionMs);
-            x1_update = 0;
-            x2_update = x_optim;
-            if(x2_update != Width)
+            int x_optim;
+            if(PositionMs > OldPositionMs)
             {
-                painter.drawImage(x_optim, 0, OffscreenWav, 0, 0, Width - x_optim, OffscreenWav.height() - DisplayRulerHeight);
+                x_optim = timeToPixel(PositionMs - OldPositionMs);
+                x2_update = Width;
+                x1_update = x2_update - x_optim;
+                Constrain(x1_update, 0, Width);
+                if(x1_update != 0)
+                {
+                    painter.drawPixmap(0, 0, OffscreenWav, x_optim, 0, x1_update, OffscreenWav.height() - DisplayRulerHeight);
+                }
+            }
+            else
+            {
+                x_optim = timeToPixel(OldPositionMs - PositionMs);
+                x1_update = 0;
+                x2_update = x_optim;
+                Constrain(x2_update, 0, Width);
+                if(x2_update != Width)
+                {
+                    painter.drawPixmap(x_optim, 0, OffscreenWav, 0, 0, Width - x_optim, OffscreenWav.height() - DisplayRulerHeight);
+                }
             }
         }
-    }
 
-    Rect.setLeft(x1_update);
-    Rect.setRight(x2_update);
-    Rect.setBottom(Rect.bottom() - DisplayRulerHeight);
+        Rect.setLeft(x1_update);
+        Rect.setRight(x2_update);
+        Rect.setBottom(Rect.bottom() - DisplayRulerHeight);
 
-    int RectHeight = Rect.height();
-    int Middle = Rect.top() + (RectHeight / 2);
+        painter.fillRect(Rect, WavBackColor);
 
-    painter.fillRect(Rect, WavBackColor);
+        int Middle = Rect.top() + Rect.height() / 2;
 
-    painter.setPen(WavColor);
-
-    volatile unsigned int x_scaled, next_x_scaled;
-    int PeakMax, PeakMin;
-
-    if(PeaksPerPixelScaled < 1.0)
-    {
-        PeaksPerPixelScaled = 1.0;
-    }
-
-    for(int x = x1_update; x <= x2_update; x++)
-    {
-        x_scaled = std::round((x * PeaksPerPixelScaled) + StartPositionInPeaks);
-
-        if(x_scaled >= PeakList.peaksNumber()) x_scaled = PeakList.peaksNumber() - 1;
-
-        PeakMax = PeakList[x_scaled].max();
-        PeakMin = PeakList[x_scaled].min();
-
-        next_x_scaled = std::min(std::round(((x + 1) * PeaksPerPixelScaled) + StartPositionInPeaks), (double)PeakList.peaksNumber());
-        for(unsigned int i = x_scaled + 1; i < next_x_scaled; i++)
+        int PeakMax, PeakMin;
+        volatile unsigned int x_scaled;
+        volatile unsigned int next_x_scaled;
+        for(unsigned int x = x1_update; x < x2_update; x++)
         {
-            if(PeakList[i].max() > PeakMax) PeakMax = PeakList[i].max();
-            else if(PeakList[i].min() < PeakMin) PeakMin = PeakList[i].min();
+            x_scaled = std::round(x * PeaksPerPixelScaled + StartPositionInPeaks);
+            if(x_scaled >= PeakList.peaksNumber()) x_scaled = PeakList.peaksNumber() - 1;
+            PeakMax = PeakList[x_scaled].max();
+            PeakMin = PeakList[x_scaled].min();
+
+            next_x_scaled = std::min( std::round((x + 1) * PeaksPerPixelScaled + StartPositionInPeaks), (double)PeakList.peaksNumber() );
+            for(unsigned int i = x_scaled + 1; i < next_x_scaled; i++)
+            {
+                if(PeakList[i].max() > PeakMax) PeakMax = PeakList[i].max();
+                if(PeakList[i].min() < PeakMin) PeakMin = PeakList[i].min();
+            }
+
+            int y1 = std::round((((PeakMax * VerticalScaling) / 100.0) * Rect.height()) / 65536);
+            int y2 = std::round((((PeakMin * VerticalScaling) / 100.0) * Rect.height()) / 65536);
+
+            painter.drawLine(QPoint(x, Middle - y1), QPoint(x, Middle - y2));
+
         }
 
-        int y1 = std::round((((PeakMax * VerticalScaling) / 100) * RectHeight) / 65536);
-        int y2 = std::round((((PeakMin * VerticalScaling) / 100) * RectHeight) / 65536);
-        painter.drawLine(QPoint(x, Middle - y1), QPoint(x, Middle - y2));
+        painter.setPen(ZeroLineColor);
+        painter.drawLine(QPoint(0, Middle), QPoint(Width, Middle));
     }
 }
 
 void WaveformView::paintRuler(QPainter &painter)
 {
-    if(LengthMs == 0) return;
     if(DisplayRulerHeight > 0)
     {
-        QRect Rect = Viewport->rect();
+        QRect Rect = painter.window();
         Rect.setTop(Rect.bottom() - DisplayRulerHeight);
 
         // Draw background
@@ -168,13 +170,17 @@ void WaveformView::paintRuler(QPainter &painter)
         painter.setPen(RulerTextColor);
         QFontMetrics metrics(painter.font());
 
+        int Width = timeToPixel(PageSizeMs);
+
         // Do some little calculation to try to show "round" time
-        int StepMs = pixelToTime(metrics.width("0:00:00.0") * 2);
+        int MaxPosStep = std::round(double(Width) / (metrics.width("0:00:00.0") * 2.0));
+        int StepMs = std::round(double(PageSizeMs) / MaxPosStep);
         if(StepMs == 0) StepMs = 1;
 
         int StepLog = std::trunc(std::pow(10, std::trunc(std::log10(StepMs))));
+        StepMs = double(StepMs) / StepLog * (StepLog);
 
-        int p = PositionMs;
+        int p = PositionMs; // / (StepMs * StepMs);
         int x;
         int x1, x2;
         int height, width;
@@ -224,6 +230,22 @@ void WaveformView::paintRuler(QPainter &painter)
     }
 }
 
+void WaveformView::paintMinimumBlank(QPainter &painter, int rangeTop, int rangeBottom)
+{
+    if(ShowMinimumBlank)
+    {
+        if(Info1.exists())
+        {
+            drawAlphaRect(painter, Info1.getStart(MinimumBlank), Info1.getStop(MinimumBlank), rangeTop, rangeBottom);
+        }
+
+        if(Info2.exists())
+        {
+            drawAlphaRect(painter, Info2.getStart(MinimumBlank), Info2.getStop(MinimumBlank), rangeTop, rangeBottom);
+        }
+    }
+}
+
 void WaveformView::paintRanges(QPainter &painter, const RangeList &Subs, int topPos, int bottomPos, bool topLine, bool bottomLine)
 {
     int RangeHeightDiv10 = (bottomPos - topPos) / 10;
@@ -235,18 +257,18 @@ void WaveformView::paintRanges(QPainter &painter, const RangeList &Subs, int top
         const Range &r = Subs.Subtitles[i].Time;
         int x1 = -1;
         int x2 = -1;
-        if(r.StartTime >= PositionMs && r.StartTime <= PositionMs + PageSizeMs)
+        if(r.StartTime >= PositionMs && r.StartTime < PositionMs + PageSizeMs)
         {
             x1 = timeToPixel(r.StartTime - PositionMs);
         }
-        if(r.EndTime >= PositionMs && r.EndTime <= PositionMs + PageSizeMs)
+        if(r.EndTime >= PositionMs && r.EndTime < PositionMs + PageSizeMs)
         {
             x2 = timeToPixel(r.EndTime - PositionMs);
         }
 
         bool ShowStart = x1 != -1;
         bool ShowEnd = x2 != -1 && x2 != x1;
-        bool FullHLines = r.StartTime < PositionMs && r.EndTime > PositionMs + PageSizeMs;
+        bool FullHLines = r.StartTime < PositionMs && r.EndTime >= PositionMs + PageSizeMs;
         if(Subs.Editable)
         {
             if(ShowStart || ShowEnd || FullHLines)
@@ -321,11 +343,10 @@ void WaveformView::paintRanges(QPainter &painter, const RangeList &Subs, int top
 
 void WaveformView::paintSelection(QPainter &painter)
 {
-    Q_UNUSED(painter)
-    /*if(Selection.StartTime > 0)
+    if(TheSelection.StartTime > 0)
     {
-        int SelectionStartTime = Selection.StartTime;
-        int SelectionStopTime = Selection.EndTime;
+        int SelectionStartTime = TheSelection.StartTime;
+        int SelectionStopTime = TheSelection.EndTime;
         int x1 = timeToPixel(SelectionStartTime - PositionMs);
         int x2 = timeToPixel(SelectionStopTime - PositionMs);
         if(x1 == x2)
@@ -339,7 +360,7 @@ void WaveformView::paintSelection(QPainter &painter)
         {
             if(x1 < 0) x1 = 0;
             if(x2 >= width()) x2 = width() - 1;
-            QRect SelRect = rect();
+            QRect SelRect = Viewport->rect();
             SelRect.setLeft(x1);
             SelRect.setRight(x2+1);
             SelRect.setBottom(SelRect.bottom() - DisplayRulerHeight);
@@ -348,7 +369,7 @@ void WaveformView::paintSelection(QPainter &painter)
             painter.fillRect(SelRect, Qt::white);
             painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
         }
-    }*/
+    }
 }
 
 void WaveformView::paintCursor(QPainter &painter)
@@ -364,6 +385,38 @@ void WaveformView::paintCursor(QPainter &painter)
    }
 }
 
+void WaveformView::paintPlayCursor(QPainter &painter)
+{
+    if(IsPlaying)
+    {
+        if(PlayCursorMs >= PositionMs && PlayCursorMs <= PositionMs + PageSizeMs)
+        {
+            painter.setCompositionMode(QPainter::RasterOp_SourceXorDestination);
+            painter.setPen(Qt::white);
+            int x = timeToPixel(PlayCursorMs - PositionMs);
+            painter.drawLine(QPoint(x, 0), QPoint(x, painter.window().height() - DisplayRulerHeight));
+            painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        }
+    }
+}
+
+void WaveformView::drawAlphaRect(QPainter &painter, int t1, int t2, int y1, int y2)
+{
+    int x1 = timeToPixel(t1 - PositionMs);
+    int x2 = timeToPixel(t2 - PositionMs);
+
+    int Width = timeToPixel(PageSizeMs);
+    Constrain(x1, 0, Width);
+    Constrain(x2, 0, Width);
+
+    QRect Rect;
+    Rect.setLeft(x1);
+    Rect.setRight(x2);
+    Rect.setTop(y1);
+    Rect.setBottom(y2);
+
+    painter.fillRect(Rect, QColor(255, 255, 255, 80));
+}
 
 /*void WaveformView::paintEvent(QPaintEvent *ev)
 {

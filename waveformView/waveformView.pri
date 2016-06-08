@@ -3,7 +3,8 @@ HEADERS += \
     $$PWD/rangelist.h \
     $$PWD/range.h \
     $$PWD/karasplit.h \
-    $$PWD/timemstoshortstring.h
+    $$PWD/timemstoshortstring.h \
+    $$PWD/minblankinfo.h
 
 SOURCES += \
     $$PWD/waveformview.cpp \

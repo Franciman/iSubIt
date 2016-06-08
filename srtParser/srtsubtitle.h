@@ -70,6 +70,22 @@ struct Range
 {
     int StartTime;
     int EndTime;
+
+    int duration() const
+    {
+        return EndTime - StartTime;
+    }
+
+
+    bool operator==(const Range &other) const
+    {
+        return StartTime == other.StartTime && EndTime == other.EndTime;
+    }
+
+    bool operator!=(const Range &other) const
+    {
+        return !(*this == other);
+    }
 };
 
 

@@ -4,6 +4,107 @@
 #include "waveformView/timemstoshortstring.h"
 
 #include <stdexcept>
+#include <algorithm>
+
+#include "constrain.h"
+
+int compareRanges(const Range &R1, const Range &R2)
+{
+    if(R1.StartTime < R2.StartTime) return 1;
+    else if(R1.StartTime > R2.StartTime) return -1;
+    else
+    {
+        if(R1.EndTime < R2.EndTime) return 1;
+        else if(R1.EndTime > R2.EndTime) return -1;
+        else return 0;
+    }
+}
+
+int RangeList::findInsertPos(const Range &R) const
+{
+    int Min = 0;
+    int Max = Subtitles.size() - 1;
+    int Mid = (Max + Min) / 2;
+    const Range *RangeCursor;
+    int CompareResult;
+    while(Min <= Max)
+    {
+        RangeCursor = &Subtitles[Mid].Time;
+        CompareResult = compareRanges(*RangeCursor, R);
+        if(CompareResult == 1) // RangeCursor < R
+        {
+            Min = Mid + 1;
+        }
+        else if(CompareResult == -1) // RangeCursor > R
+        {
+            Max = Mid - 1;
+        }
+        else // RangeCursor = R
+        {
+            return Mid;
+        }
+        Mid = (Max + Min) / 2;
+    }
+    return Min;
+}
+
+Range *RangeList::findFirstRangeAt(int PosMs, int ExpandBy)
+{
+    if(Subtitles.size() == 0) return nullptr;
+
+    SearchStartAt = PosMs;
+    SearchExpandBy = ExpandBy;
+    SearchIdx = findInsertPos(SearchStartAt - SearchExpandBy, -1);
+    Constrain(SearchIdx, 0, (int)Subtitles.size() - 1);
+    while(SearchIdx > 0 && Subtitles[SearchIdx].Time.EndTime > SearchStartAt + SearchExpandBy)
+    {
+        --SearchIdx;
+    }
+    return findNextRange();
+}
+
+Range *RangeList::findNextRange()
+{
+    Range *Result = nullptr;
+    while(SearchIdx >= 0 && SearchIdx < Subtitles.size())
+    {
+        Range &R = Subtitles[SearchIdx].Time;
+        SearchIdx++;
+        if(R.StartTime - SearchExpandBy > SearchStartAt) return Result;
+        else if(R.StartTime - SearchExpandBy <= SearchStartAt && R.EndTime + SearchExpandBy >= SearchStartAt)
+        {
+            Result = &R;
+        }
+    }
+    return Result;
+}
+
+void RangeList::fullSort()
+{
+    std::sort(Subtitles.begin(), Subtitles.end(), [](SrtSubtitle S1, SrtSubtitle S2)
+    {
+        return compareRanges(S1.Time, S2.Time) > 0;
+    });
+}
+
+int RangeList::getRangeIdxAt(int pos) const
+{
+    int Res = -1;
+    if(Subtitles.empty()) return Res;
+
+    int i = findInsertPos(pos, -1);
+    if(i < 0) i = 0;
+    if(i >= Subtitles.size()) i = Subtitles.size() - 1;
+    while(i >= 0)
+    {
+        if(Subtitles[i].Time.StartTime <= pos && Subtitles[i].Time.EndTime >= pos)
+        {
+            Res = i;
+        }
+        i--;
+    }
+    return Res;
+}
 
 std::vector<SrtSubtitle> readSubsFromFile(const char *filename)
 {
