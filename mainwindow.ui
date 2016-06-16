@@ -52,11 +52,7 @@
          <item>
           <widget class="QPushButton" name="playButton">
            <property name="text">
-            <string/>
-           </property>
-           <property name="icon">
-            <iconset>
-             <normaloff>../vss-itasa-code/visualsubsync/Resources/Play.bmp</normaloff>../vss-itasa-code/visualsubsync/Resources/Play.bmp</iconset>
+            <string>Play</string>
            </property>
           </widget>
          </item>
@@ -65,11 +61,7 @@
        <item>
         <widget class="QPushButton" name="pauseButton">
          <property name="text">
-          <string/>
-         </property>
-         <property name="icon">
-          <iconset>
-           <normaloff>../vss-itasa-code/visualsubsync/Resources/Pause.bmp</normaloff>../vss-itasa-code/visualsubsync/Resources/Pause.bmp</iconset>
+          <string>Pause</string>
          </property>
         </widget>
        </item>
