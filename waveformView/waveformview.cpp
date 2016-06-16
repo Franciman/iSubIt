@@ -45,6 +45,7 @@ WaveformView::WaveformView(QWidget *parent) :
     horizontalScrollBar()->setValue(0);
 
     OffscreenWav = QPixmap(Viewport->size());
+    Offscreen2 = QPixmap(Viewport->size());
     Offscreen = QPixmap(Viewport->size());
 
     OldPositionMs = PositionMs = 0;
@@ -82,8 +83,7 @@ void WaveformView::updatePeaks(Peaks &&P)
 
 void WaveformView::setPositionMs(int pos)
     {
-        if(pos < 0) pos = 0;
-        if(pos > LengthMs - PageSizeMs) pos = LengthMs - PageSizeMs;
+        Constrain(pos, 0, LengthMs - PageSizeMs);
         if(pos != PositionMs)
         {
             PositionMs = pos;
@@ -131,6 +131,7 @@ bool WaveformView::viewportEvent(QEvent *ev)
     {
     case QEvent::Resize:
         OffscreenWav = QPixmap(Viewport->size());
+        Offscreen2 = QPixmap(Viewport->size());
         Offscreen = QPixmap(Viewport->size());
         updateView(PageSize);
         return true;

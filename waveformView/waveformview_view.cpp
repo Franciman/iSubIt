@@ -22,42 +22,49 @@ const QColor CursorColor = QColor(Qt::yellow);
 
 void WaveformView::updateView(int flags)
 {
-    if(flags & PageSize)
+    if(flags != PlayCursor)
     {
-        OffscreenWav = QPixmap(Viewport->size());
-        Offscreen = QPixmap(Viewport->size());
-        QPainter painter(&OffscreenWav);
-        paintWav(painter, false);
-        paintRuler(painter);
-    }
-    else if(flags & Position)
-    {
-       QPainter painter(&OffscreenWav);
-       paintWav(painter, true);
-       OldPositionMs = PositionMs;
-       OldPageSizeMs = PageSizeMs;
-       paintRuler(painter);
-    }
-    QPainter painter(&Offscreen);
-    painter.drawPixmap(0, 0, OffscreenWav);
-    int Height = Viewport->height() - DisplayRulerHeight;
-    if(DisplayRangeLists.size() != 0)
-    {
-        int SubHeight = Height / DisplayRangeLists.size();
-
-        // paintSceneChange
-
-        unsigned int i = 0;
-        for(auto subsList = DisplayRangeLists.cbegin(); subsList != DisplayRangeLists.cend(); ++subsList, ++i)
+        if(flags & PageSize)
         {
-            paintRanges(painter, **subsList, SubHeight * i, SubHeight * (i+1), i == 0 /* draw topLine? */, i == DisplayRangeLists.size() - 1 /* draw bottomLine ? */);
+            OffscreenWav = QPixmap(Viewport->size());
+            Offscreen2 = QPixmap(Viewport->size());
+            Offscreen = QPixmap(Viewport->size());
+            QPainter painter(&OffscreenWav);
+            paintWav(painter, false);
+            paintRuler(painter);
+        }
+        else if(flags & Position)
+        {
+            QPainter painter(&OffscreenWav);
+            paintWav(painter, true);
+            OldPositionMs = PositionMs;
+            OldPageSizeMs = PageSizeMs;
+            paintRuler(painter);
+        }
+        QPainter painter(&Offscreen2);
+        painter.drawPixmap(0, 0, OffscreenWav);
+        int Height = Viewport->height() - DisplayRulerHeight;
+        if(DisplayRangeLists.size() != 0)
+        {
+            int SubHeight = Height / DisplayRangeLists.size();
+
+            // paintSceneChange
+
+            unsigned int i = 0;
+            for(auto subsList = DisplayRangeLists.cbegin(); subsList != DisplayRangeLists.cend(); ++subsList, ++i)
+            {
+                paintRanges(painter, **subsList, SubHeight * i, SubHeight * (i+1), i == 0 /* draw topLine? */, i == DisplayRangeLists.size() - 1 /* draw bottomLine ? */);
+            }
+
+            paintMinimumBlank(painter, 0, Height);
         }
 
-        paintMinimumBlank(painter, 0, Height);
+        paintSelection(painter);
+        paintCursor(painter);
     }
 
-    paintSelection(painter);
-    paintCursor(painter);
+    QPainter painter(&Offscreen);
+    painter.drawPixmap(0, 0, Offscreen2);
     paintPlayCursor(painter);
 
     Viewport->setOffscreen(&Offscreen);

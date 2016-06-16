@@ -71,6 +71,7 @@ class WaveformView : public QAbstractScrollArea
     std::vector<RangeList*> DisplayRangeLists;
 
     QPixmap OffscreenWav;
+    QPixmap Offscreen2;
     QPixmap Offscreen;
 
     SubtitleModel *Subs;

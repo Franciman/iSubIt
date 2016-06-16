@@ -40,11 +40,11 @@ VideoPlayer::VideoPlayer(QWidget *parent, Qt::WindowFlags f) :
     mpv_opengl_cb_set_update_callback(mpv_gl, VideoPlayer::on_update, (void*)this);
     connect(this, SIGNAL(frameSwapped()), SLOT(swapped()));
 
-    //mpv_observe_property(mpv, 0, "time-pos", MPV_FORMAT_DOUBLE);
+    mpv_observe_property(mpv, 0, "time-pos", MPV_FORMAT_DOUBLE);
     mpv_set_wakeup_callback(mpv, wakeup, this);
     pause();
-    connect(&PosUpdateTimer, SIGNAL(timeout()), this, SLOT(updateTime()));
-    PosUpdateTimer.start(40);
+    //connect(&PosUpdateTimer, SIGNAL(timeout()), this, SLOT(updateTime()));
+    //PosUpdateTimer.start(40);
 }
 
 VideoPlayer::~VideoPlayer()
@@ -108,14 +108,16 @@ void VideoPlayer::on_mpv_events()
 
 void VideoPlayer::play()
 {
-    const char *args[] = {"cycle", "pause", NULL};
+    const char *args[] = {"set", "pause", "no", NULL};
     mpv_command_async(mpv, 0, args);
+    command(QStringList() << "set" << "pause" << "no");
 }
 
 void VideoPlayer::pause()
 {
-    const char *args[] = {"cycle", "pause", NULL};
+    const char *args[] = {"set", "pause", "yes", NULL};
     mpv_command_async(mpv, 0, args);
+    //command(QStringList() << "set" << "pause" << "yes");
 }
 
 void VideoPlayer::changeModel(const QString &filenameVideo, SubtitleModel *subs)
@@ -137,6 +139,7 @@ void VideoPlayer::handle_mpv_event(mpv_event *event)
     switch (event->event_id) {
     case MPV_EVENT_PROPERTY_CHANGE:
         TimePosition = *(double*)((mpv_event_property*)event->data)->data * 1000;
+        emit positionChanged(TimePosition);
         break;
     default:
         break;
