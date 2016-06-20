@@ -94,6 +94,7 @@ void WaveformView::setPositionMs(int pos)
 
 void WaveformView::changeModel(const QString &, SubtitleModel *model)
 {
+    DisplayRangeLists.clear();
     if(model->hasVOSubtitles())
     {
         DisplayRangeLists.push_back(model->getVOSubtitles());

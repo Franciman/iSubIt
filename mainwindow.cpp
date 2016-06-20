@@ -25,9 +25,12 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->pauseButton, SIGNAL(clicked()), ui->videoPlayer, SLOT(pause()));
     connect(ui->pauseButton, SIGNAL(clicked()), ui->waveform, SLOT(startPlaying()));
 
+    connect(ui->videoPlayer, SIGNAL(positionChanged(int)), this, SLOT(updateTime(int)));
+
     connect(ui->videoPlayer, SIGNAL(positionChanged(int)), ui->waveform, SLOT(changePlayCursorPos(int)));
 
     connect(ui->actionNew_Project, SIGNAL(triggered()), this, SLOT(newProject()));
+
 
     connect(this, SIGNAL(changeProject(QString, SubtitleModel*)), ui->videoPlayer, SLOT(changeModel(QString,SubtitleModel*)));
     connect(this, SIGNAL(changeProject(QString,SubtitleModel*)), ui->waveform, SLOT(changeModel(QString,SubtitleModel*)));
@@ -38,6 +41,11 @@ MainWindow::~MainWindow()
 {
     delete ui;
     delete Model;
+}
+
+void MainWindow::updateTime(int TimeMs)
+{
+    ui->timeLabel->setText(QString::number(TimeMs));
 }
 
 void MainWindow::updateText(QModelIndex idx)

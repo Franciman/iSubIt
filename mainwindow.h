@@ -23,6 +23,7 @@ public:
 private Q_SLOTS:
     void newProject();
     void updateText(QModelIndex idx);
+    void updateTime(int TimeMs);
 
 
 Q_SIGNALS:
