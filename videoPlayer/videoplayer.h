@@ -9,7 +9,7 @@
 
 class SubtitleModel;
 
-class VideoPlayer : public QWidget
+class VideoPlayer : public QOpenGLWidget
 {
     Q_OBJECT
 
@@ -24,8 +24,8 @@ public:
 Q_SIGNALS:
     void positionChanged(int value);
 protected:
-    //void initializeGL() override;
-    //void paintGL() override;
+    void initializeGL() override;
+    void paintGL() override;
 private Q_SLOTS:
     void swapped();
     void on_mpv_events();

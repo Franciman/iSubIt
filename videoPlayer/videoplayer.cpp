@@ -19,8 +19,7 @@ static void *get_proc_address(void *ctx, const char *name)
 }
 
 VideoPlayer::VideoPlayer(QWidget *parent, Qt::WindowFlags f) :
-    //QOpenGLWidget(parent, f),
-    QWidget(parent, f),
+    QOpenGLWidget(parent, f),
     PosUpdateTimer(this)
 {
     mpv = mpv::qt::Handle::FromRawHandle(mpv_create());
@@ -37,13 +36,13 @@ VideoPlayer::VideoPlayer(QWidget *parent, Qt::WindowFlags f) :
     mpv_set_option(mpv, "wid", MPV_FORMAT_INT64, &wid);
     mpv_set_option_string(mpv, "input-cursor", "no");
 
-    //mpv::qt::set_option_variant(mpv, "vo", "opengl-cb");
+    mpv::qt::set_option_variant(mpv, "vo", "opengl-cb");
 
-    //mpv_gl = (mpv_opengl_cb_context *)mpv_get_sub_api(mpv, MPV_SUB_API_OPENGL_CB);
-    //if(!mpv_gl)
-        //throw std::runtime_error("OpenGL not compiled in");
-    //mpv_opengl_cb_set_update_callback(mpv_gl, VideoPlayer::on_update, (void*)this);
-    //connect(this, SIGNAL(frameSwapped()), SLOT(swapped()));
+    mpv_gl = (mpv_opengl_cb_context *)mpv_get_sub_api(mpv, MPV_SUB_API_OPENGL_CB);
+    if(!mpv_gl)
+        throw std::runtime_error("OpenGL not compiled in");
+    mpv_opengl_cb_set_update_callback(mpv_gl, VideoPlayer::on_update, (void*)this);
+    connect(this, SIGNAL(frameSwapped()), SLOT(swapped()));
 
     //mpv_observe_property(mpv, 0, "time-pos", MPV_FORMAT_DOUBLE);
     mpv_set_wakeup_callback(mpv, wakeup, this);
@@ -55,18 +54,19 @@ VideoPlayer::VideoPlayer(QWidget *parent, Qt::WindowFlags f) :
 
 VideoPlayer::~VideoPlayer()
 {
-    /*makeCurrent();
+    makeCurrent();
     if(mpv_gl)
         mpv_opengl_cb_set_update_callback(mpv_gl, nullptr, nullptr);
-    mpv_opengl_cb_uninit_gl(mpv_gl);*/
+    mpv_opengl_cb_uninit_gl(mpv_gl);
 }
 
 void VideoPlayer::updateTime()
 {
     double t;
     mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &t);
-    TimePosition = t * 1000;
-    Q_EMIT positionChanged(TimePosition);
+    mpv_get_property_async(mpv, 123, "time-pos", MPV_FORMAT_DOUBLE);
+    //TimePosition = t * 1000;
+    //Q_EMIT positionChanged(TimePosition);
 }
 
 void VideoPlayer::command(const QVariant &params)
@@ -84,7 +84,7 @@ QVariant VideoPlayer::getProperty(const QString &name) const
     return mpv::qt::get_property_variant(mpv, name);
 }
 
-/*void VideoPlayer::initializeGL()
+void VideoPlayer::initializeGL()
 {
     int r = mpv_opengl_cb_init_gl(mpv_gl, nullptr, get_proc_address, nullptr);
     if(r < 0)
@@ -94,7 +94,7 @@ QVariant VideoPlayer::getProperty(const QString &name) const
 void VideoPlayer::paintGL()
 {
     mpv_opengl_cb_draw(mpv_gl, defaultFramebufferObject(), width(), -height());
-}*/
+}
 
 void VideoPlayer::swapped()
 {
@@ -115,15 +115,16 @@ void VideoPlayer::on_mpv_events()
 void VideoPlayer::play()
 {
     int f = 0;
-    mpv_set_property(mpv, "pause", MPV_FORMAT_FLAG, &f);
+    mpv_set_property_async(mpv, 0, "pause", MPV_FORMAT_FLAG, &f);
     PosUpdateTimer.start(40);
 }
 
 void VideoPlayer::pause()
 {
+    std::cout << TimePosition << std::endl;
     int f = 1;
     PosUpdateTimer.stop();
-    mpv_set_property(mpv, "pause", MPV_FORMAT_FLAG, &f);
+    mpv_set_property_async(mpv, 0, "pause", MPV_FORMAT_FLAG, &f);
 }
 
 void VideoPlayer::changeModel(const QString &filenameVideo, SubtitleModel *subs)
@@ -143,10 +144,14 @@ void VideoPlayer::subsUpdated()
 void VideoPlayer::handle_mpv_event(mpv_event *event)
 {
     switch (event->event_id) {
-    case MPV_EVENT_PROPERTY_CHANGE:
+    case MPV_EVENT_GET_PROPERTY_REPLY:
         TimePosition = *(double*)((mpv_event_property*)event->data)->data * 1000;
         emit positionChanged(TimePosition);
         break;
+    //case MPV_EVENT_PROPERTY_CHANGE:
+        //TimePosition = *(double*)((mpv_event_property*)event->data)->data * 1000;
+        //emit positionChanged(TimePosition);
+        //break;
     default:
         break;
     }

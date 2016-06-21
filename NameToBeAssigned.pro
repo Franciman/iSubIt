@@ -16,7 +16,7 @@ include (waveformView/waveformView.pri)
 include (videoPlayer/videoPlayer.pri)
 
 QMAKE_CXXFLAGS -= -O2
-QMAKE_CXXFLAGS += -O0
+QMAKE_CXXFLAGS += -O3
 
 TARGET = NameToBeAssigned
 TEMPLATE = app
