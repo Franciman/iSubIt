@@ -32,10 +32,6 @@ VideoPlayer::VideoPlayer(QWidget *parent, Qt::WindowFlags f) :
     if(mpv_initialize(mpv) < 0)
         throw std::runtime_error("could not initialize mpv context");
 
-    int64_t wid = winId();
-    mpv_set_option(mpv, "wid", MPV_FORMAT_INT64, &wid);
-    mpv_set_option_string(mpv, "input-cursor", "no");
-
     mpv::qt::set_option_variant(mpv, "vo", "opengl-cb");
 
     mpv_gl = (mpv_opengl_cb_context *)mpv_get_sub_api(mpv, MPV_SUB_API_OPENGL_CB);
@@ -121,7 +117,6 @@ void VideoPlayer::play()
 
 void VideoPlayer::pause()
 {
-    std::cout << TimePosition << std::endl;
     int f = 1;
     PosUpdateTimer.stop();
     mpv_set_property_async(mpv, 0, "pause", MPV_FORMAT_FLAG, &f);
