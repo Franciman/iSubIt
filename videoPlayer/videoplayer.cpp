@@ -58,8 +58,8 @@ VideoPlayer::~VideoPlayer()
 
 void VideoPlayer::updateTime()
 {
-    double t;
-    mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &t);
+    //double t;
+    //mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &t);
     mpv_get_property_async(mpv, 123, "time-pos", MPV_FORMAT_DOUBLE);
     //TimePosition = t * 1000;
     //Q_EMIT positionChanged(TimePosition);
@@ -112,14 +112,14 @@ void VideoPlayer::play()
 {
     int f = 0;
     mpv_set_property_async(mpv, 0, "pause", MPV_FORMAT_FLAG, &f);
-    PosUpdateTimer.start(40);
+    PosUpdateTimer.start(20);
 }
 
 void VideoPlayer::pause()
 {
     int f = 1;
-    PosUpdateTimer.stop();
     mpv_set_property_async(mpv, 0, "pause", MPV_FORMAT_FLAG, &f);
+    PosUpdateTimer.stop();
 }
 
 void VideoPlayer::changeModel(const QString &filenameVideo, SubtitleModel *subs)
