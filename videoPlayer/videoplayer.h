@@ -7,7 +7,28 @@
 #include <mpv/opengl_cb.h>
 #include <mpv/qthelper.hpp>
 
+#include <QThread>
+
 class SubtitleModel;
+
+class TimeUpdater : public QThread
+{
+    Q_OBJECT
+
+    mpv::qt::Handle &mpv;
+    int TimePosition;
+
+public:
+    TimeUpdater(mpv::qt::Handle &handle) :
+        mpv(handle),
+        TimePosition(0)
+    { }
+
+    virtual void run() override;
+
+Q_SIGNALS:
+    void timeChanged(int);
+};
 
 class VideoPlayer : public QOpenGLWidget
 {
@@ -30,6 +51,11 @@ private Q_SLOTS:
     void swapped();
     void on_mpv_events();
     void updateTime();
+    void timeChange(int time)
+    {
+        emit positionChanged(time);
+    }
+
 public Q_SLOTS:
     void play();
     void pause();
@@ -39,7 +65,8 @@ private:
     void handle_mpv_event(mpv_event *event);
     static void on_update(void *ctx);
 
-    QTimer PosUpdateTimer;
+    //QTimer PosUpdateTimer;
+    TimeUpdater PosUpdate;
     mpv::qt::Handle mpv;
     mpv_opengl_cb_context *mpv_gl;
     int TimePosition;

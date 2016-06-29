@@ -20,7 +20,8 @@ static void *get_proc_address(void *ctx, const char *name)
 
 VideoPlayer::VideoPlayer(QWidget *parent, Qt::WindowFlags f) :
     QOpenGLWidget(parent, f),
-    PosUpdateTimer(this)
+    //PosUpdateTimer(this)
+    PosUpdate(mpv)
 {
     mpv = mpv::qt::Handle::FromRawHandle(mpv_create());
     if(!mpv)
@@ -44,8 +45,22 @@ VideoPlayer::VideoPlayer(QWidget *parent, Qt::WindowFlags f) :
     mpv_set_wakeup_callback(mpv, wakeup, this);
     pause();
     TimePosition = 0;
-    connect(&PosUpdateTimer, SIGNAL(timeout()), this, SLOT(updateTime()));
+    connect(&PosUpdate, SIGNAL(timeChanged(int)), this, SLOT(timeChange(int)));
+    //connect(&PosUpdateTimer, SIGNAL(timeout()), this, SLOT(updateTime()));
     //PosUpdateTimer.start(40);
+}
+
+void TimeUpdater::run()
+{
+    double val;
+    int TimePosition;
+    while(true)
+    {
+        usleep(10);
+        mpv_get_property(mpv, "time-pos", MPV_FORMAT_DOUBLE, &val);
+        TimePosition = val * 1000;
+        emit timeChanged(TimePosition);
+    }
 }
 
 VideoPlayer::~VideoPlayer()
@@ -112,14 +127,17 @@ void VideoPlayer::play()
 {
     int f = 0;
     mpv_set_property_async(mpv, 0, "pause", MPV_FORMAT_FLAG, &f);
-    PosUpdateTimer.start(20);
+    //PosUpdateTimer.start(20);
+    PosUpdate.start();
 }
 
 void VideoPlayer::pause()
 {
     int f = 1;
+    PosUpdate.quit();
     mpv_set_property_async(mpv, 0, "pause", MPV_FORMAT_FLAG, &f);
-    PosUpdateTimer.stop();
+    //PosUpdateTimer.stop();
+    updateTime();
 }
 
 void VideoPlayer::changeModel(const QString &filenameVideo, SubtitleModel *subs)
@@ -141,7 +159,8 @@ void VideoPlayer::handle_mpv_event(mpv_event *event)
     switch (event->event_id) {
     case MPV_EVENT_GET_PROPERTY_REPLY:
         TimePosition = *(double*)((mpv_event_property*)event->data)->data * 1000;
-        emit positionChanged(TimePosition);
+        //emit positionChanged(TimePosition);
+        timeChange(TimePosition);
         break;
     //case MPV_EVENT_PROPERTY_CHANGE:
         //TimePosition = *(double*)((mpv_event_property*)event->data)->data * 1000;
